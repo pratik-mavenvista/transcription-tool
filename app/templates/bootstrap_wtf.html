@@ -1,0 +1,245 @@
+{% macro quick_form(form, action='.', method='post', extra_classes=None, role='form', form_type='basic', horizontal_columns=('lg', 2, 10), button_map={}, id='', enctype=None, render_kw=None) %}
+
+{#-
+  Renders a form with all fields and a submit button.
+  Relies on the internal ``form_field()`` macro.
+  Usually called like this:
+    {{ quick_form(my_form) }}
+  For more examples, see the documentation.
+  Parameters (those with a default value have common defaults):
+  ``form``
+    The form to output.
+  ``action='.'``
+    The URL to submit to.
+    Flask-WTF uses ``form.action`` if available, otherwise it will
+    use ``request.url`` as a default. This is usually fine.
+  ``method='post'``
+    The HTTP method to use.
+    Flask-WTF uses ``form.method`` if available, otherwise ``'post'``.
+  ``extra_classes=None``
+    Any extra classes to assign to the ``<form>`` tag.
+  ``role='form'``
+    The ARIA role to assign to the form.
+    Bootstrap requires ``role="form"`` on forms for accessibility
+    reasons.
+    Set to ``None`` to disable.
+  ``form_type='basic'``
+    The form type. Can be one of 'basic', 'inline' or 'horizontal'.
+    Using 'inline' will arrange all fields on one line and enable
+    automatic SR-only labels.
+    'horizontal' will arrange labels and fields side-by-side.
+  ``horizontal_columns=('lg', 2, 10)``
+    When using 'horizontal' form type, this specifies the column widths.
+    It's a 3-tuple of ``(size, left_column, right_column)``, where
+    ``size`` is a device size code (usually 'lg' or 'md') and
+    ``left_column`` and ``right_column`` are the ``col-size-*``
+    numbers.
+  ``button_map={'submit': 'primary'}``
+    A dict that maps field names (lowercased) to bootstrap button styles.
+    For example, ``{'submit': 'success', 'cancel': 'default'}``
+    would render the 'submit' field with ``btn-success`` and the
+    'cancel' field with ``btn-default``.
+  ``id=''``
+    The ``id`` to use for the form.
+  ``enctype=None``
+    The ``enctype`` to use for the form. If ``None``, it will be
+    automatically set if ``form`` contains a ``FileField``.
+  ``render_kw``
+    A dict of attributes to be added to the ``<form>`` tag.
+-#}
+
+{%- if render_kw is none -%}
+  {%- set render_kw = {} -%}
+{%- endif -%}
+
+{%- if action is none -%}
+  {%- set action = form.action -%}
+{%- endif -%}
+
+{%- if method is none -%}
+  {%- set method = form.method -%}
+{%- endif -%}
+
+<form
+  {%- if action != None %} action="{{action}}"{% endif -%}
+  {%- if id %} id="{{id}}"{% endif -%}
+  {%- if method %} method="{{method}}"{% endif -%}
+  class="form
+    {%- if form_type == 'inline' %} form-inline{% endif %}
+    {%- if form_type == 'horizontal' %} form-horizontal
+    {%- endif %}
+    {%- if extra_classes %} {{extra_classes}}{% endif -%}"
+  {%- if role %} role="{{role}}"{% endif %}
+  {%- if enctype %} enctype="{{enctype}}"{% endif %}
+  {%- for key, value in render_kw.items() %} {{key}}="{{value}}"{% endfor -%}
+  >
+  {{ form.hidden_tag() }}
+  {{ form_fields(form,
+                 form_type=form_type,
+                 horizontal_columns=horizontal_columns,
+                 button_map=button_map) }}
+</form>
+{%- endmacro %}
+
+
+{% macro form_field(field,
+                    form_type='basic',
+                    horizontal_columns=('lg', 2, 10),
+                    button_map={}) %}
+{#-
+  Renders a single form field.
+  For more examples, see the documentation.
+  Parameters (those with a default value have common defaults):
+  ``field``
+    The field to output.
+  ``form_type='basic'``
+    The form type. Can be one of 'basic', 'inline' or 'horizontal'.
+    Using 'inline' will arrange all fields on one line and enable
+    automatic SR-only labels.
+    'horizontal' will arrange labels and fields side-by-side.
+  ``horizontal_columns=('lg', 2, 10)``
+    When using 'horizontal' form type, this specifies the column widths.
+    It's a 3-tuple of ``(size, left_column, right_column)``, where
+    ``size`` is a device size code (usually 'lg' or 'md') and
+    ``left_column`` and ``right_column`` are the ``col-size-*``
+    numbers.
+  ``button_map={'submit': 'primary'}``
+    A dict that maps field names (lowercased) to bootstrap button styles.
+    For example, ``{'submit': 'success', 'cancel': 'default'}``
+    would render the 'submit' field with ``btn-success`` and the
+    'cancel' field with ``btn-default``.
+-#}
+
+{%- set with_label = field.type != 'HiddenField' and field.type != 'CSRFTokenField' %}
+{%- set is_button = field.type == 'SubmitField' %}
+{%- set is_checkbox = field.type == 'BooleanField' %}
+{%- set is_file = field.type == 'FileField' %}
+{%- set is_radio = field.type == 'RadioField' %}
+{%- set is_select = field.type == 'SelectField' or field.type == 'SelectMultipleField' %}
+
+{%- if field.render_kw and field.render_kw.class %}
+  {%- set add_class = field.render_kw.class %}
+{%- else %}
+  {%- set add_class = '' %}
+{%- endif %}
+
+{%- if is_button %}
+  {%- set button_style = button_map.get(field.name.lower(), 'default') %}
+  {%- set classes = 'btn btn-' + button_style + ' ' + add_class %}
+{%- elif is_checkbox or is_radio %}
+  {%- set classes = add_class %}
+{%- elif is_file %}
+  {%- set classes = 'form-control-file ' + add_class %}
+{%- elif is_select %}
+  {%- set classes = 'form-control ' + add_class %}
+{%- else %}
+  {%- set classes = 'form-control ' + add_class %}
+{%- endif %}
+
+{%- if field.errors %}
+  {%- set classes = classes + ' is-invalid' %}
+{%- endif %}
+
+
+{%- if form_type == 'horizontal' %}
+  <div class="form-group row
+    {%- if field.errors %} has-error{% endif -%}
+    {%- if field.flags.required %} required{% endif -%}">
+    {%- if with_label %}
+    {{ field.label(class="col-" + horizontal_columns[0] + "-" + horizontal_columns[1] + " col-form-label") }}
+    {%- endif %}
+    <div class="col-{{horizontal_columns[0]}}-{{horizontal_columns[2]}}
+      {%- if is_checkbox and with_label %} pt-sm-2{% endif -%}
+      {%- if is_radio %} radio-list{% endif -%}">
+      {{ field(class=classes, **field.render_kw) }}
+      {%- if field.errors %}
+        {%- for error in field.errors %}
+        <div class="invalid-feedback">{{error}}</div>
+        {%- endfor %}
+      {%- elif field.description -%}
+        <small class="form-text text-muted">{{field.description}}</small>
+      {%- endif %}
+    </div>
+    {%- if not with_label %}
+      <div class="col-{{horizontal_columns[0]}}-offset-{{horizontal_columns[1]}} col-{{horizontal_columns[0]}}-{{horizontal_columns[2]}}">
+      </div>
+    {%- endif %}
+  </div>
+{%- elif form_type == 'inline' %}
+  {#- note: no hidden labels yet -#}
+  {%- if is_button %}
+    {{ field(class=classes, **field.render_kw) }}
+  {%- else %}
+    <div class="form-group">
+    {%- if with_label %}{{ field.label(class="sr-only") }}{%- endif %}
+    {{ field(class=classes, placeholder=field.label.text, **field.render_kw) }}
+    </div>
+    {%- if field.errors %}
+      {%- for error in field.errors %}
+      <div class="invalid-feedback">{{error}}</div>
+      {%- endfor %}
+    {%- elif field.description -%}
+      <small class="form-text text-muted">{{field.description}}</small>
+    {%- endif %}
+  {%- endif %}
+{%- else %} {#- basic form type -#}
+  <div class="form-group
+    {%- if field.errors %} has-error{% endif -%}
+    {%- if field.flags.required %} required{% endif -%}">
+  {%- if with_label %}
+    {{ field.label() }}
+  {%- endif %}
+
+  {%- if is_checkbox and with_label %}
+    <div class="form-check">
+      {{ field(class="form-check-input " + classes, **field.render_kw) }}
+      {{ field.label(class="form-check-label") }} {# Re-rendering label for form-check layout #}
+    </div>
+  {%- elif is_radio %}
+    {#- Radio fields are a bit special, they are typically rendered as a list.
+        This is a basic interpretation; more complex scenarios might need custom macros. -#}
+    {%- for subfield in field %}
+    <div class="form-check">
+      {{ subfield(class="form-check-input " + classes, **field.render_kw) }}
+      {{ subfield.label(class="form-check-label") }}
+    </div>
+    {%- endfor %}
+  {%- else %}
+    {{ field(class=classes, **field.render_kw) }}
+  {%- endif %}
+
+  {%- if field.errors %}
+    {%- for error in field.errors %}
+    <div class="invalid-feedback d-block">{{error}}</div> {# d-block to ensure feedback is shown #}
+    {%- endfor %}
+  {%- elif field.description -%}
+    <small class="form-text text-muted">{{field.description}}</small>
+  {%- endif %}
+  </div>
+{%- endif %}
+{%- endmacro %}
+
+{% macro form_fields(form, form_type='basic', horizontal_columns=('lg', 2, 10), button_map={}) %}
+  {%- for field in form %}
+    {{ form_field(field,
+                  form_type=form_type,
+                  horizontal_columns=horizontal_columns,
+                  button_map=button_map) }}
+  {%- endfor %}
+{%- endmacro %}
+
+{% macro render_field(field, classkwargs) %}
+  {{ field(**classkwargs) }}
+{% endmacro %}
+
+{% macro render_form_errors(form) %}
+  {% if form.errors %}
+    <div class="alert alert-danger">
+    {% for field_name, field_errors in form.errors.items() %}
+      {% for error in field_errors %}
+      <div>{{ form[field_name].label.text }}: {{ error }}</div>
+      {% endfor %}
+    {% endfor %}
+    </div>
+  {% endif %}
+{% endmacro %}

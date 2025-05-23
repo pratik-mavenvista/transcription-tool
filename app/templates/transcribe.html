@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Live Transcription</h2>
+    <div id="status" class="alert alert-info">Idle</div>
+    <button id="startButton" class="btn btn-primary mr-2">Start Transcription</button>
+    <button id="stopButton" class="btn btn-danger" disabled>Stop Transcription</button>
+    <hr>
+    <div id="transcriptionOutput" class="border p-3" style="min-height: 200px; background-color: #f8f9fa;">
+        <p><em>Transcription will appear here...</em></p>
+    </div>
+    <div id="interimOutput" class="text-muted mt-2">
+        <p><em>Interim results...</em></p>
+    </div>
+</div>
+
+<script>
+    const startButton = document.getElementById('startButton');
+    const stopButton = document.getElementById('stopButton');
+    const transcriptionOutput = document.getElementById('transcriptionOutput');
+    const interimOutput = document.getElementById('interimOutput');
+    const statusDiv = document.getElementById('status');
+    // Add a save button, though we will also save automatically on stop
+    const saveButton = document.createElement('button');
+    saveButton.id = 'saveButton';
+    saveButton.className = 'btn btn-success ml-2';
+    saveButton.textContent = 'Save Transcript';
+    saveButton.disabled = true; // Disabled initially
+
+    // Insert the save button after the stopButton
+    stopButton.parentNode.insertBefore(saveButton, stopButton.nextSibling);
+
+
+    let SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true; // Keep listening even after a pause
+        recognition.interimResults = true; // Get interim results
+
+        recognition.onstart = function() {
+            statusDiv.textContent = 'Recording...';
+            statusDiv.className = 'alert alert-warning';
+            startButton.disabled = true;
+            stopButton.disabled = false;
+            transcriptionOutput.innerHTML = '<p><em>Listening...</em></p>'; // Clear previous results
+            interimOutput.innerHTML = '';
+        };
+
+        recognition.onresult = function(event) {
+            let final_transcript = '';
+            let interim_transcript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    final_transcript += event.results[i][0].transcript;
+                } else {
+                    interim_transcript += event.results[i][0].transcript;
+                }
+            }
+
+            if (final_transcript) {
+                // Append final transcript to the main output, creating new paragraphs for segments
+                const p = document.createElement('p');
+                p.textContent = final_transcript.trim();
+                if (transcriptionOutput.firstChild && transcriptionOutput.firstChild.textContent === 'Listening...' || transcriptionOutput.firstChild.textContent === 'Transcription will appear here...') {
+                    transcriptionOutput.innerHTML = ''; // Clear placeholder
+                }
+                transcriptionOutput.appendChild(p);
+            }
+            if (interim_transcript) {
+                interimOutput.innerHTML = `<p><em>${interim_transcript}</em></p>`;
+            }
+        };
+
+        recognition.onerror = function(event) {
+            statusDiv.textContent = 'Error: ' + event.error;
+            statusDiv.className = 'alert alert-danger';
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                statusDiv.innerHTML += '<br>Please ensure microphone access is allowed and try again. You might need to allow it in your browser settings for this site.';
+            }
+            console.error('Speech recognition error', event);
+            startButton.disabled = false;
+            stopButton.disabled = true;
+        };
+
+        recognition.onend = function() {
+            statusDiv.textContent = 'Stopped. Click Start to transcribe again. Transcript ready to save.';
+            statusDiv.className = 'alert alert-info'; // Changed to info to indicate ready to save
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            interimOutput.innerHTML = ''; // Clear interim results when stopped
+            
+            // Enable save button if there's content
+            if (getFinalTranscriptionText().trim()) {
+                saveButton.disabled = false;
+            }
+            // Automatically attempt to save if there's content
+            if (getFinalTranscriptionText().trim()) {
+                 saveTranscription();
+            }
+        };
+
+        function getFinalTranscriptionText() {
+            let text = '';
+            transcriptionOutput.querySelectorAll('p').forEach(p => {
+                if (p.textContent !== 'Listening...' && p.textContent !== 'Transcription will appear here...') {
+                    text += p.textContent + '\\n'; // Add newline between paragraphs
+                }
+            });
+            return text.trim();
+        }
+
+        async function saveTranscription() {
+            const transcriptText = getFinalTranscriptionText();
+            if (!transcriptText) {
+                statusDiv.textContent = 'No transcription content to save.';
+                statusDiv.className = 'alert alert-warning';
+                return;
+            }
+
+            saveButton.disabled = true; // Disable while saving
+            statusDiv.textContent = 'Saving...';
+            statusDiv.className = 'alert alert-info';
+
+            try {
+                const response = await fetch("{{ url_for('main.save_transcription') }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // CSRF token might be needed if you have CSRF protection enabled globally
+                        // 'X-CSRFToken': '{{ csrf_token() }}' // If using Flask-WTF CSRF
+                    },
+                    body: JSON.stringify({ transcription: transcriptText })
+                });
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    statusDiv.textContent = 'Transcription saved successfully!';
+                    statusDiv.className = 'alert alert-success';
+                    // Optionally, redirect or clear output:
+                    // transcriptionOutput.innerHTML = '<p><em>Transcription will appear here...</em></p>';
+                } else {
+                    statusDiv.textContent = 'Error saving: ' + (data.message || 'Unknown error');
+                    statusDiv.className = 'alert alert-danger';
+                    saveButton.disabled = false; // Re-enable if save failed
+                }
+            } catch (error) {
+                console.error('Save transcription error:', error);
+                statusDiv.textContent = 'Error saving: Network or server issue.';
+                statusDiv.className = 'alert alert-danger';
+                saveButton.disabled = false; // Re-enable
+            }
+        }
+
+        saveButton.onclick = saveTranscription;
+
+        startButton.onclick = function() {
+            try {
+                // Clear previous final transcript and disable save button before starting
+                transcriptionOutput.innerHTML = '<p><em>Listening...</em></p>';
+                interimOutput.innerHTML = '';
+                saveButton.disabled = true;
+                recognition.start();
+            } catch(e) {
+                console.error("Error starting recognition: ", e);
+                statusDiv.textContent = 'Error starting. Is microphone ready?';
+                statusDiv.className = 'alert alert-danger';
+            }
+        };
+
+        stopButton.onclick = function() {
+            recognition.stop();
+            // Note: onend will handle enabling save and auto-saving
+        };
+
+    } else {
+        statusDiv.textContent = 'Speech Recognition API not supported in this browser.';
+        statusDiv.className = 'alert alert-danger';
+        startButton.disabled = true;
+        stopButton.disabled = true;
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Hi, {% if current_user.is_authenticated %}{{ current_user.username }}{% else %}Guest{% endif %}!</h1>
+    <p>Welcome to the Flask Application.</p>
+    {% if not current_user.is_authenticated %}
+    <p>You can <a href="{{ url_for('auth.login') }}">login</a> or <a href="{{ url_for('auth.register') }}">register</a>.</p>
+    {% endif %}
+{% endblock %}
