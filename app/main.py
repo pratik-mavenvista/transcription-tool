@@ -37,7 +37,7 @@ def save_transcription():
         return jsonify({'status': 'success', 'message': 'Transcription saved'})
     except Exception as e:
         db.session.rollback()
-        print(f"Error saving transcription: {e}") # For logging
+        current_app.logger.error(f"Error saving transcription: {e}")
         return jsonify({'status': 'error', 'message': 'Failed to save transcription due to a server error'}), 500
 
 @bp.route('/dashboard')

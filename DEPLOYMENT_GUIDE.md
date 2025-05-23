@@ -81,9 +81,11 @@ Regardless of the platform, here are common steps to prepare your Flask applicat
     *   Most PaaS platforms offer easy SSL/TLS certificate provisioning (e.g., via Let's Encrypt).
     *   If using a VPS, you'll need to configure this yourself (e.g., using Certbot with Nginx/Apache).
 
-8.  **`requirements.txt`:**
-    *   This file lists all Python dependencies for your project. It's crucial for replicating the environment on the deployment server.
-    *   Generated using `pip freeze > requirements.txt`. Ensure it's up-to-date and clean.
+8.  **`requirements.txt` (Dependency Management):**
+    *   **Crucial for Production:** This file lists all Python dependencies for your project. It's vital for replicating the exact environment on the deployment server.
+    *   **Pruning for Production:** The `requirements.txt` generated during development (e.g., via `pip freeze` in a development virtual environment) often contains packages not needed for runtime (development tools, testing libraries, etc.). **It is strongly advised to prune this file or generate a new one that only includes essential runtime dependencies before deploying to production.**
+    *   **For detailed instructions on how to generate a minimal `requirements.txt` for production, please refer to the "Managing `requirements.txt` for Production" section in `REVIEW_AND_FIXES.md`.**
+    *   Ensure this file is kept up-to-date as you add or update dependencies.
 
 9.  **`.gitignore`:**
     *   This file tells Git which files or directories to ignore. It should include virtual environments, `.env` files, instance folders with secrets, `__pycache__`, SQLite databases, etc.
@@ -92,7 +94,8 @@ Regardless of the platform, here are common steps to prepare your Flask applicat
     *   Ensure your WSGI server knows how to find your Flask application object. This is typically specified when starting the server (e.g., `gunicorn module:variable`, where `module` is the Python file and `variable` is your Flask app instance). In this project, it would be `run:app` if `run.py` contains `app = create_app()`.
 
 11. **Database Migrations (if applicable):**
-    *   If you are using a tool like Flask-Migrate (Alembic) for database schema migrations, ensure you run migrations in your deployment pipeline or as a step before starting the new version of the app.
+    *   While this project uses `db.create_all()` for simplicity (which creates tables but doesn't handle schema changes after creation), most production applications use database migration tools like Flask-Migrate (which uses Alembic).
+    *   If you adopt migrations, ensure you run them as part of your deployment pipeline before starting the new version of the app. `db.create_all()` is generally not sufficient for ongoing schema evolution in production.
 
 12. **Testing:**
     *   Run all your unit and integration tests in an environment that's as close to production as possible before deploying.
@@ -104,9 +107,10 @@ Regardless of the platform, here are common steps to prepare your Flask applicat
 
 The following files, already created in this project, are essential for deployment:
 
-*   **`requirements.txt`**: Lists Python package dependencies.
+*   **`requirements.txt`**: Lists Python package dependencies. (Remember to prune for production as noted above).
 *   **`.gitignore`**: Specifies intentionally untracked files that Git should ignore.
 
 ---
 
 This guide should serve as a starting point. Always refer to the specific documentation of your chosen deployment platform for detailed instructions.
+Remember to consult `REVIEW_AND_FIXES.md` for guidance on cleaning up `requirements.txt` and other project-specific recommendations.

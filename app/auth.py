@@ -20,9 +20,19 @@ def login():
             flash('Invalid username or password')
             return redirect(url_for('auth.login'))
         login_user(user, remember=form.remember_me.data)
+        
         next_page = request.args.get('next')
-        if not next_page or url_for(next_page).host != '': # Security: ensure next_page is a relative path
-            next_page = url_for('main.index') # Default redirect
+        # Prevent open redirect vulnerability
+        from urllib.parse import urlparse
+        if next_page and urlparse(next_page).netloc == '':
+            # Further check: ensure it's not trying to use //example.com which urlparse might miss
+            if next_page.startswith('//'):
+                next_page = url_for('main.index')
+        elif not next_page: # if next_page is None or empty
+             next_page = url_for('main.index')
+        else: # if next_page has a netloc (external domain)
+            next_page = url_for('main.index')
+            
         return redirect(next_page)
     return render_template('login.html', title='Sign In', form=form)
 
